@@ -1,0 +1,28 @@
+{
+  "candidate_name": null,
+  "target_position": null,
+  "professional_summary": null,
+  "contact_channels": [
+    "телефон",
+    "почта"
+  ],
+  "skills": [],
+  "soft_skills": [],
+  "work_experience": [],
+  "education": [
+    {
+      "institution": "Московский технический университет связи и информатики (МТУСИ)",
+      "education_level": "Высшее",
+      "education_field": "Цифровая экономика и массовые коммуникации",
+      "field_of_study": "Реклама и связи с общественностью в отрасли",
+      "graduation_year": null
+    }
+  ],
+  "projects": [],
+  "courses_and_certifications": [],
+  "languages": [],
+  "achievements": [],
+  "portfolio_links": [
+    "кейсы по запросу (email-кампания конференции, взаимодействие с партнёрами Gamma Lab)"
+  ]
+}

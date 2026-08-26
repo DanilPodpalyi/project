@@ -1,0 +1,24 @@
+{
+  "title": "Python-разработчик",
+  "responsibilities": [
+    "Разработка и сопровождение внутренних сервисов.",
+    "Работа с базами данных.",
+    "Участие в проверке кода."
+  ],
+  "required_skills": [
+    "Python",
+    "PostgreSQL",
+    "Git",
+    "REST API"
+  ],
+  "preferred_skills": [
+    "FastAPI",
+    "Docker"
+  ],
+  "experience_requirement": "Опыт коммерческой разработки на Python от 2 лет",
+  "education_level": "Высшее",
+  "education_field": "Техническое",
+  "employment_type": "Полная занятость",
+  "work_format": "Удалённая работа",
+  "conditions": []
+}

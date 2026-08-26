@@ -1,0 +1,41 @@
+{
+  "candidate_name": "Иван Иванов",
+  "vacancy_title": "Python-разработчик",
+  "total_score": 75.0,
+  "recommendation": "Умеренное соответствие вакансии",
+  "matched_required_skills": [
+    "Python",
+    "PostgreSQL",
+    "Git"
+  ],
+  "missing_required_skills": [
+    "REST API"
+  ],
+  "matched_preferred_skills": [],
+  "missing_preferred_skills": [
+    "FastAPI",
+    "Docker"
+  ],
+  "breakdown": {
+    "required_skills": {
+      "score": 45.0,
+      "max_score": 60.0,
+      "details": "Совпало 3 из 4 обязательных навыков."
+    },
+    "preferred_skills": {
+      "score": 0.0,
+      "max_score": 10.0,
+      "details": "Совпало 0 из 2 желательных навыков."
+    },
+    "experience": {
+      "score": 20.0,
+      "max_score": 20.0,
+      "details": "Опыт кандидата: 2 года; требуется: 2 года."
+    },
+    "education": {
+      "score": 10.0,
+      "max_score": 10.0,
+      "details": "Уровень образования: совпадает; направление: совпадает."
+    }
+  }
+}

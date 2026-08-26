@@ -1,0 +1,48 @@
+{
+  "candidate_name": null,
+  "vacancy_title": "Junior Event & Communications Manager",
+  "total_score": 43.6,
+  "recommendation": "Низкое соответствие вакансии",
+  "matched_required_skills": [
+    "деловые коммуникации",
+    "переговоры",
+    "Excel",
+    "Unisender",
+    "английский язык"
+  ],
+  "missing_required_skills": [
+    "PR",
+    "контент",
+    "организация мероприятий",
+    "подготовка пресс-релизов"
+  ],
+  "matched_preferred_skills": [
+    "Power BI"
+  ],
+  "missing_preferred_skills": [
+    "SMM",
+    "системы медиамониторинга"
+  ],
+  "breakdown": {
+    "required_skills": {
+      "score": 33.3,
+      "max_score": 60.0,
+      "details": "Совпало 5 из 9 обязательных навыков."
+    },
+    "preferred_skills": {
+      "score": 3.3,
+      "max_score": 10.0,
+      "details": "Совпало 1 из 3 желательных навыков."
+    },
+    "experience": {
+      "score": 0.0,
+      "max_score": 20.0,
+      "details": "Опыт кандидата: 0 года; требуется: 1 года."
+    },
+    "education": {
+      "score": 7.0,
+      "max_score": 10.0,
+      "details": "Уровень образования: совпадает; направление: не совпадает."
+    }
+  }
+}

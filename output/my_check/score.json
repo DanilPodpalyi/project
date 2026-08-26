@@ -1,0 +1,61 @@
+{
+  "candidate_name": "ДАНИЛ ПОДПАЛЫЙ",
+  "vacancy_title": "Machine Learning Engineer",
+  "total_score": 40.8,
+  "recommendation": "Низкое соответствие вакансии",
+  "matched_required_skills": [
+    "Python",
+    "SQL"
+  ],
+  "missing_required_skills": [
+    "NumPy",
+    "Pandas",
+    "scikit-learn",
+    "PyTorch",
+    "TensorFlow",
+    "Git",
+    "Linux",
+    "REST API",
+    "Docker"
+  ],
+  "matched_preferred_skills": [
+    "PostgreSQL",
+    "NLP",
+    "компьютерное зрение",
+    "английский язык"
+  ],
+  "missing_preferred_skills": [
+    "MLflow",
+    "DVC",
+    "FastAPI",
+    "Apache Airflow",
+    "Apache Kafka",
+    "Kubernetes",
+    "мониторинг сервисов",
+    "практики MLOps",
+    "LLM",
+    "RAG-проекты"
+  ],
+  "breakdown": {
+    "required_skills": {
+      "score": 10.9,
+      "max_score": 60.0,
+      "details": "Совпало 2 из 11 обязательных навыков."
+    },
+    "preferred_skills": {
+      "score": 2.9,
+      "max_score": 10.0,
+      "details": "Совпало 4 из 14 желательных навыков."
+    },
+    "experience": {
+      "score": 20.0,
+      "max_score": 20.0,
+      "details": "Опыт кандидата: 3.5 года; требуется: 2 года."
+    },
+    "education": {
+      "score": 7.0,
+      "max_score": 10.0,
+      "details": "Уровень образования: совпадает; направление: не совпадает."
+    }
+  }
+}
