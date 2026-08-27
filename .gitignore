@@ -2,5 +2,11 @@
 __pycache__/
 *.pyc
 .vscode/
-output/*.crdownload
+.pytest_cache/
+.coverage
+tests/
+examples/
+docs/
+data/
+output/
 *.crdownload
