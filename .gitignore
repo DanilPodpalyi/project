@@ -4,9 +4,8 @@ __pycache__/
 .vscode/
 .pytest_cache/
 .coverage
-tests/
 examples/
-docs/
+
 data/
 output/
 *.crdownload
