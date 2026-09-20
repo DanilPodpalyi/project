@@ -13,6 +13,8 @@ from json import JSONDecodeError
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
+
+from .profession import profession_from_resume
 from urllib.request import Request, urlopen
 
 from pydantic import BaseModel, Field
@@ -61,7 +63,7 @@ class VacancySearchError(RuntimeError):
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Поиск вакансий на hh.ru по target_position из JSON резюме"
+            "Поиск вакансий на hh.ru по target_profession из JSON резюме"
         ),
     )
     parser.add_argument(
@@ -115,13 +117,18 @@ def read_resume(file_path: Path) -> dict:
 
 
 def get_search_query(resume: dict) -> str:
-    target_position = resume.get("target_position")
-    if not isinstance(target_position, str) or not target_position.strip():
+    profession = profession_from_resume(resume)
+    title = profession.specialization or profession.role
+    if not title:
         raise VacancySearchError(
-            "В резюме не указана целевая должность (target_position)",
+            "В резюме не указана целевая профессия "
+            "(target_profession или target_position)",
         )
 
-    return " ".join(target_position.split())
+    parts = [title]
+    if profession.domain:
+        parts.append(profession.domain)
+    return " ".join(" ".join(parts).split())
 
 
 def build_search_url(

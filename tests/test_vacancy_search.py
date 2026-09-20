@@ -42,6 +42,24 @@ class VacancySearchTests(unittest.TestCase):
             "Python разработчик",
         )
 
+    def test_uses_specialization_and_domain_from_new_schema(self) -> None:
+        query = get_search_query(
+            {
+                "target_profession": {
+                    "role": "Analyst",
+                    "specialization": "Traffic Analyst",
+                    "domain": "Digital Marketing / Web Analytics",
+                    "seniority": "Junior/Middle",
+                    "core_skills": ["Google Analytics"],
+                }
+            }
+        )
+
+        self.assertEqual(
+            query,
+            "Traffic Analyst Digital Marketing / Web Analytics",
+        )
+
     def test_rejects_resume_without_target_position(self) -> None:
         with self.assertRaisesRegex(VacancySearchError, "target_position"):
             get_search_query({"target_position": None})

@@ -8,6 +8,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from .profession import profession_from_resume, profession_from_value
+
 
 EXPERIENCE_MAX = 25
 PROJECTS_MAX = 20
@@ -212,6 +214,7 @@ def normalize_text(value: str) -> str:
 
 def collect_candidate_skills(resume: dict) -> dict[str, str]:
     skills: list[str] = list(resume.get("skills", []))
+    skills.extend(profession_from_resume(resume).core_skills)
     skills.extend(resume.get("soft_skills", []))
 
     for workplace in resume.get("work_experience", []):
@@ -390,13 +393,17 @@ def calculate_header_score(resume: dict, vacancy: dict) -> tuple[float, str]:
     contacts_count = len(resume.get("contact_channels", []))
     contacts_score = min(contacts_count / 2, 1.0) * 5.0
 
-    target_position = resume.get("target_position") or ""
-    vacancy_title = vacancy.get("title") or ""
+    target_profile = profession_from_resume(resume)
+    vacancy_profile = profession_from_value(
+        vacancy.get("profession") or vacancy.get("title")
+    )
+    target_position = target_profile.label()
+    vacancy_title = vacancy_profile.label()
     target_presence_score = 3.0 if target_position else 0.0
     relevance_score = 0.0
     if target_position and vacancy_title:
-        target_tokens = _canonical_skill_tokens(target_position)
-        vacancy_tokens = _canonical_skill_tokens(vacancy_title)
+        target_tokens = _canonical_skill_tokens(target_profile.search_text())
+        vacancy_tokens = _canonical_skill_tokens(vacancy_profile.search_text())
         target_tokens -= HEADER_ROLE_WORDS
         vacancy_tokens -= HEADER_ROLE_WORDS
         if vacancy_tokens:

@@ -3,11 +3,13 @@
 import argparse
 import time
 from pathlib import Path
+from typing import Any
 
 from ollama import chat
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .document_reader import read_document
+from .profession import ProfessionProfile, profession_from_value
 
 
 MODEL_NAME = "gemma4:12b"
@@ -18,6 +20,12 @@ MAX_OUTPUT_TOKENS = 8192
 class VacancyData(BaseModel):
     title: str | None = Field(
         description="Название должности или вакансии"
+    )
+    profession: ProfessionProfile = Field(
+        description=(
+            "Профессия вакансии: роль, специализация, домен, seniority и "
+            "основные навыки"
+        )
     )
     responsibilities: list[str] = Field(
         description="Рабочие задачи и обязанности сотрудника"
@@ -62,9 +70,25 @@ class VacancyData(BaseModel):
         description="Прочие явно указанные условия работы"
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def accept_legacy_title_only(cls, data: Any) -> Any:
+        """Поддерживает старые vacancy.json, в которых было только title."""
+        if isinstance(data, dict) and "profession" not in data:
+            data = dict(data)
+            data["profession"] = profession_from_value(
+                data.get("title"),
+                core_skills=list(data.get("required_skills") or []),
+            ).model_dump()
+        return data
+
 
 SYSTEM_PROMPT = """
 Ты извлекаешь структурированные данные из вакансии.
+
+Профессию вакансии обязательно раздели на role, specialization, domain,
+seniority и core_skills. В core_skills включай только явно требуемые навыки,
+определяющие эту роль. Не подменяй профессию одним названием title.
 
 Строго соблюдай границы разделов вакансии.
 

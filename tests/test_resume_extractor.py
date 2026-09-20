@@ -107,6 +107,52 @@ class ReadResumeTests(unittest.TestCase):
                 set(definition["properties"]),
             )
 
+    def test_uses_structured_target_profession(self) -> None:
+        data = self._resume_data()
+        data["target_profession"] = {
+            "role": "Analyst",
+            "specialization": "Traffic Analyst",
+            "domain": "Digital Marketing / Web Analytics",
+            "seniority": "Junior/Middle",
+            "core_skills": ["Google Analytics", "SQL"],
+        }
+
+        resume = ResumeData.model_validate(data)
+
+        self.assertEqual(resume.target_profession.role, "Analyst")
+        self.assertEqual(resume.target_position, "Traffic Analyst")
+        self.assertNotIn("target_position", resume.model_dump())
+
+    def test_accepts_legacy_target_position(self) -> None:
+        data = self._resume_data()
+        data["target_position"] = "Python-разработчик"
+        data["skills"] = ["Python"]
+
+        resume = ResumeData.model_validate(data)
+
+        self.assertEqual(
+            resume.target_profession.specialization,
+            "Python-разработчик",
+        )
+        self.assertEqual(resume.target_profession.core_skills, ["Python"])
+
+    @staticmethod
+    def _resume_data() -> dict:
+        return {
+            "candidate_name": "Иван",
+            "professional_summary": None,
+            "contact_channels": [],
+            "skills": [],
+            "soft_skills": [],
+            "work_experience": [],
+            "education": [],
+            "projects": [],
+            "courses_and_certifications": [],
+            "languages": [],
+            "achievements": [],
+            "portfolio_links": [],
+        }
+
     def test_recognizes_candidate_name_placeholders(self) -> None:
         self.assertTrue(_is_candidate_name_placeholder("ФИО"))
         self.assertTrue(

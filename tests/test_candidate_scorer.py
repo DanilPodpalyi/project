@@ -14,6 +14,7 @@ from resume_evaluator.candidate_scorer import (
     SUMMARY_MAX,
     calculate_candidate_experience,
     calculate_education_score,
+    calculate_header_score,
     calculate_projects_score,
     collect_candidate_skills,
     compare_skills,
@@ -228,6 +229,33 @@ class ScoreWeightsTests(unittest.TestCase):
         score, _ = calculate_projects_score(resume, vacancy)
 
         self.assertEqual(score, 20.0)
+
+    def test_header_score_accepts_structured_professions(self) -> None:
+        resume = {
+            "candidate_name": "Иван",
+            "contact_channels": ["email", "Telegram"],
+            "target_profession": {
+                "role": "Analyst",
+                "specialization": "Traffic Analyst",
+                "domain": "Digital Marketing / Web Analytics",
+                "seniority": "Middle",
+                "core_skills": ["Google Analytics"],
+            },
+        }
+        vacancy = {
+            "title": "Web Traffic Analyst",
+            "profession": {
+                "role": "Analyst",
+                "specialization": "Traffic Analyst",
+                "domain": "Web Analytics / Digital Marketing",
+                "seniority": "Middle",
+                "core_skills": ["Google Analytics"],
+            },
+        }
+
+        score, _ = calculate_header_score(resume, vacancy)
+
+        self.assertEqual(score, HEADER_MAX)
 
 
 if __name__ == "__main__":
