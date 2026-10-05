@@ -2,10 +2,12 @@
 
 import time
 
-from ollama import chat
+from .model_runtime import chat
 
 
-MODEL_NAME = "gemma4:12b"
+from .settings import get_settings
+
+MODEL_NAME = get_settings().model
 
 
 def main() -> None:

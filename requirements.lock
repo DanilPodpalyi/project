@@ -1,0 +1,20 @@
+# Проверено на Python 3.13 / Windows; pip install -r requirements.lock
+annotated-types==0.8.0
+anyio==4.14.2
+certifi==2026.7.22
+DAWG2-Python==0.9.0
+h11==0.16.0
+httpcore==1.0.9
+httpx==0.28.1
+idna==3.18
+lxml==6.1.1
+ollama==0.6.2
+pydantic==2.13.4
+pydantic_core==2.46.4
+pymorphy3==2.0.6
+pymorphy3-dicts-ru==2.4.417150.4580142
+pypdf==6.16.1
+python-docx==1.2.0
+setuptools==84.0.0
+typing-inspection==0.4.2
+typing_extensions==4.16.0

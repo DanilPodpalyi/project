@@ -1,0 +1,13 @@
+# Скопируйте в config.toml; передайте --config config.toml основной команде.
+# Значения переменных окружения имеют приоритет. Токен HH сюда не помещается.
+[resume_evaluator]
+model = "gemma4:12b"
+embedding_model = "bge-m3:latest"
+ollama_host = "http://127.0.0.1:11434"
+context_size = 16384
+ollama_timeout_seconds = 600
+max_run_seconds = 3600
+http_timeout_seconds = 20
+search_max_pages = 3
+detail_limit = 80
+response_cache_hours = 24

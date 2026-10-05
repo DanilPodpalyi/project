@@ -11,8 +11,10 @@ from pydantic import ValidationError
 from resume_evaluator.resume_quality_evaluator import (
     EVALUATION_GOAL,
     GeneratedResumeEvaluation,
+    audit_skill_claims,
     build_result,
     evaluate_resume,
+    unsupported_skill_claims,
 )
 
 
@@ -66,6 +68,90 @@ class ResumeQualityEvaluationTests(unittest.TestCase):
 
         self.assertEqual(result.total_score, 100.0)
 
+    def test_related_technology_is_not_skill_evidence(self) -> None:
+        cases = [
+            ("Keras", "PyTorch", "PyTorch"),
+            ("Keras", "TensorFlow", "TensorFlow"),
+            ("MySQL", "PostgreSQL", "PostgreSQL"),
+            ("OpenCV", "Computer Vision", "Computer Vision"),
+            ("scikit-learn", "PyTorch", "PyTorch"),
+        ]
+
+        for resume_skill, claimed_skill, expected in cases:
+            with self.subTest(
+                resume_skill=resume_skill,
+                claimed_skill=claimed_skill,
+            ):
+                unsupported = unsupported_skill_claims(
+                    f"Кандидат владеет {claimed_skill}.",
+                    json.dumps({"skills": [resume_skill]}),
+                )
+                self.assertIn(expected, unsupported)
+
+    def test_unsupported_positive_claim_is_removed_without_score_change(
+        self,
+    ) -> None:
+        payload = self._payload()
+        payload["skills"]["strengths"] = [
+            "Keras, PyTorch и TensorFlow подтверждают сильный стек.",
+            "Keras явно указан в навыках.",
+        ]
+        generated = GeneratedResumeEvaluation.model_validate(payload)
+
+        audited = audit_skill_claims(
+            generated,
+            json.dumps({"skills": ["Keras"]}),
+        )
+
+        self.assertEqual(
+            audited.skills.strengths,
+            ["Keras явно указан в навыках."],
+        )
+        self.assertEqual(audited.skills.score, generated.skills.score)
+        self.assertEqual(
+            build_result(audited).total_score,
+            build_result(generated).total_score,
+        )
+
+    def test_explicit_alias_and_concrete_project_evidence_are_kept(self) -> None:
+        resume = json.dumps(
+            {
+                "skills": ["tf.keras"],
+                "projects": [
+                    {
+                        "description": (
+                            "Разработал модель классификации изображений"
+                        )
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        )
+
+        self.assertEqual(
+            unsupported_skill_claims("Использует TensorFlow.", resume),
+            [],
+        )
+        self.assertEqual(
+            unsupported_skill_claims(
+                "Есть компетенция Computer Vision.",
+                resume,
+            ),
+            [],
+        )
+
+    def test_opencv_is_not_matched_by_short_cv_alias(self) -> None:
+        resume = json.dumps({"skills": ["OpenCV"]})
+
+        self.assertEqual(
+            unsupported_skill_claims("Указан OpenCV.", resume),
+            [],
+        )
+        self.assertEqual(
+            unsupported_skill_claims("Есть Computer Vision.", resume),
+            ["Computer Vision"],
+        )
+
     @patch("resume_evaluator.resume_quality_evaluator.chat")
     def test_model_receives_resume_without_vacancy(
         self,
@@ -86,6 +172,23 @@ class ResumeQualityEvaluationTests(unittest.TestCase):
         self.assertIn("Python-разработчик, опыт 3 года", user_message)
         self.assertIn("Не сравнивай его с вакансией", user_message)
         self.assertNotIn('"vacancy"', user_message)
+
+    @patch("resume_evaluator.resume_quality_evaluator.chat")
+    def test_model_output_is_audited_before_return(
+        self,
+        chat_mock: MagicMock,
+    ) -> None:
+        payload = self._payload()
+        payload["skills"]["strengths"] = [
+            "TensorFlow подразумевается через Keras."
+        ]
+        response = MagicMock()
+        response.message.content = json.dumps(payload, ensure_ascii=False)
+        chat_mock.return_value = response
+
+        result = evaluate_resume(json.dumps({"skills": ["Keras"]}))
+
+        self.assertEqual(result.skills.strengths, [])
 
     @staticmethod
     def _payload() -> dict:

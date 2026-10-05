@@ -1,19 +1,23 @@
 """Извлечение структурированных требований и условий вакансии."""
+from .runtime import atomic_write_text
+
 
 import argparse
 import time
 from pathlib import Path
 from typing import Any
 
-from ollama import chat
+from .model_runtime import chat
 from pydantic import BaseModel, Field, model_validator
 
 from .document_reader import read_document
 from .profession import ProfessionProfile, profession_from_value
 
 
-MODEL_NAME = "gemma4:12b"
-MODEL_CONTEXT_SIZE = 16384
+from .settings import get_settings
+
+MODEL_NAME = get_settings().model
+MODEL_CONTEXT_SIZE = get_settings().context_size
 MAX_OUTPUT_TOKENS = 8192
 
 
@@ -171,7 +175,7 @@ def save_result(vacancy: VacancyData, output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     json_text = vacancy.model_dump_json(indent=2)
-    output_path.write_text(json_text, encoding="utf-8")
+    atomic_write_text(output_path, json_text)
 
 
 def parse_arguments() -> argparse.Namespace:

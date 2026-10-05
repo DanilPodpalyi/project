@@ -1,3 +1,5 @@
+> Совместимый legacy-сценарий. Основная команда релиза: `python -m resume_evaluator analyze ...`; этот документ описывает прежний модуль.
+
 # Поиск вакансий по резюме
 
 `resume_evaluator.vacancy_search` берёт `specialization` и `domain` из объекта
@@ -8,7 +10,7 @@
 Сначала создайте структурированный JSON резюме:
 
 ```powershell
-python -m resume_evaluator.resume_extractor examples/resume.txt output/resume.json
+python -m resume_evaluator.resume_extractor examples/resumes/anna_sokolova.docx output/resume.json
 ```
 
 Затем выполните поиск по всем регионам:

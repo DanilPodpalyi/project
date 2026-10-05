@@ -1,0 +1,49 @@
+{
+  "candidate_name": "Тестовый кандидат",
+  "target_profession": {
+    "role": "Marketer",
+    "specialization": "Маркетолог",
+    "domain": "Marketing",
+    "seniority": "Middle",
+    "role_family": "Marketing",
+    "focus": "Marketing Strategy / Campaign Management",
+    "core_skills": [
+      "Automation",
+      "Campaign execution",
+      "HubSpot",
+      "Salesforce",
+      "Adobe Illustrator"
+    ]
+  },
+  "professional_summary": "Маркетолог с опытом запуска региональных кампаний.",
+  "contact_channels": ["email"],
+  "skills": [
+    "Automation",
+    "Campaign execution",
+    "HubSpot",
+    "Salesforce",
+    "Adobe Illustrator"
+  ],
+  "soft_skills": [],
+  "work_experience": [
+    {
+      "company": "Example Company",
+      "position": "Marketing Specialist",
+      "period": "2024–2026",
+      "responsibilities": [
+        "Настроил Marketing Automation в HubSpot",
+        "Campaign execution: executed regional campaigns for product launches"
+      ],
+      "technologies": ["HubSpot"],
+      "achievements": [
+        "Автоматизировал подготовку кампаний и сократил время запуска на 20%"
+      ]
+    }
+  ],
+  "education": [],
+  "projects": [],
+  "courses_and_certifications": [],
+  "languages": [],
+  "achievements": [],
+  "portfolio_links": []
+}

@@ -1,6 +1,10 @@
 """Быстрая проверка зависимостей, схем и JSON без запуска модели."""
 
 import argparse
+import json
+import sys
+from uuid import uuid4
+from urllib.request import urlopen
 from importlib.util import find_spec
 from pathlib import Path
 from typing import Callable
@@ -13,15 +17,20 @@ from .document_reader import SUPPORTED_EXTENSIONS
 from .resume_extractor import ResumeData
 from .short_recommendation import RecommendationResult
 from .vacancy_extractor import VacancyData
+from .settings import get_settings
+from .runtime import atomic_write_text
 
 
-REQUIRED_PACKAGES = ("docx", "ollama", "pydantic", "pypdf")
+REQUIRED_PACKAGES = ("docx", "ollama", "pydantic", "pypdf", "pymorphy3", "httpx")
 
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Лёгкая проверка системы без загрузки модели Ollama"
     )
+    parser.add_argument("--models", action="store_true", help="Проверить Ollama и наличие обеих моделей")
+    parser.add_argument("--output-directory", type=Path, help="Проверить запись в папку результатов")
+    parser.add_argument("--sources", metavar="TITLE", help="Проверить API HH/Работы России по должности (без LLM)")
     parser.add_argument(
         "--resume",
         type=Path,
@@ -85,7 +94,9 @@ def run_check(label: str, check: Callable[[], object]) -> bool:
     try:
         check()
     except Exception as error:
-        print(f"[FAIL] {label}: {error}")
+        from pydantic import ValidationError
+        detail = "JSON не соответствует схеме" if isinstance(error, ValidationError) else str(error)
+        print(f"[FAIL] {label}: {detail}")
         return False
 
     print(f"[OK]   {label}")
@@ -93,9 +104,46 @@ def run_check(label: str, check: Callable[[], object]) -> bool:
 
 
 def check_packages() -> None:
+    if sys.version_info < (3, 11):
+        raise ValueError("Требуется Python 3.11 или новее")
     missing = [name for name in REQUIRED_PACKAGES if find_spec(name) is None]
     if missing:
         raise ValueError(f"Не установлены пакеты: {', '.join(missing)}")
+
+
+def check_models() -> None:
+    settings = get_settings()
+    with urlopen(settings.ollama_host.rstrip("/") + "/api/tags", timeout=10) as response:
+        installed = {item["name"] for item in json.load(response).get("models", [])}
+    required = [name if ":" in name else name + ":latest" for name in (settings.model, settings.embedding_model)]
+    missing = [name for name in required if name not in installed]
+    if missing:
+        raise ValueError("Не установлены модели: " + ", ".join(missing))
+    print("      Модели: " + ", ".join(required))
+
+
+def check_output(directory: Path) -> None:
+    path = directory / f".write-check-{uuid4().hex}.tmp"
+    try:
+        atomic_write_text(path, "ok")
+        if path.read_text(encoding="utf-8") != "ok":
+            raise OSError("Не удалось прочитать записанный файл")
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def check_sources(title: str, directory: Path) -> None:
+    from .market_profile import TargetProfile
+    from .russian_market import collect_russian_vacancies
+    path = directory / "source_check.json"
+    result = collect_russian_vacancies(TargetProfile(role=title, specialization=title, domain=None, seniority=None, core_skills=[]), path,
+        max_pages=1, detail_limit=1, use_cache=False, use_title_translation=False)
+    diagnostic = result.diagnostics
+    print(f"      API: {diagnostic.status}; сохранено {diagnostic.accepted}; диагностика: {path}")
+    for issue in diagnostic.errors:
+        print(f"      {issue.source}: {issue.reason}")
+    if diagnostic.status != "ok":
+        raise ValueError("Один или несколько источников недоступны. Детали — в source_check.json")
 
 
 def check_document_formats() -> None:
@@ -110,6 +158,7 @@ def check_document_formats() -> None:
 def main() -> None:
     args = parse_arguments()
     results = [
+        run_check("Настройки", get_settings),
         run_check("Зависимости Python", check_packages),
         run_check("Форматы TXT/DOCX/PDF", check_document_formats),
         run_check(
@@ -121,6 +170,12 @@ def main() -> None:
             lambda: validate_required_schema(VacancyData),
         ),
     ]
+    if args.models:
+        results.append(run_check("Ollama и модели", check_models))
+    if args.output_directory:
+        results.append(run_check("Запись результатов", lambda: check_output(args.output_directory)))
+    if args.sources:
+        results.append(run_check("Источники вакансий", lambda: check_sources(args.sources, args.output_directory or Path("output/health"))))
 
     resume: ResumeData | None = None
     vacancy: VacancyData | None = None
@@ -183,7 +238,7 @@ def main() -> None:
     if not all(results):
         raise SystemExit(1)
 
-    print("\nСистема исправна. Модель Ollama не загружалась.")
+    print("\nПроверки пройдены. Генерация текста и embeddings не выполнялись.")
 
 
 if __name__ == "__main__":

@@ -2,16 +2,20 @@
 
 import json
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from resume_evaluator.candidate_scorer import score_candidate
+from resume_evaluator.profession import TargetProfile, profession_from_value
 from resume_evaluator.resume_extractor import ResumeData
 from resume_evaluator.synthetic_vacancy_pipeline import (
     ConceptGroup,
     ConceptGrouping,
     ConceptMember,
+    EmbeddingCandidateDiagnostic,
+    ExtractedVacancy,
     NormalizedVacancy,
     PipelineStatistics,
     ProfessionSearchPlan,
@@ -19,9 +23,17 @@ from resume_evaluator.synthetic_vacancy_pipeline import (
     TripletMetrics,
     TripletSelection,
     _normalize_batch_with_fallback,
+    _focus_compatibility,
+    _job_board_query,
+    _eligible_market_vacancies,
+    _expand_search_queries,
+    _quality_checked_extraction,
+    _set_extraction_quality,
     _tighten_responsibility_groups,
     aggregate_synthetic_vacancy,
+    benchmark_title_reranker,
     build_search_plan,
+    build_target_profile,
     build_skill_groups_python,
     calculate_relevance_scores,
     deduplicate_vacancies,
@@ -32,6 +44,7 @@ from resume_evaluator.synthetic_vacancy_pipeline import (
     normalize_vacancies,
     prefilter_vacancies,
     select_best_three,
+    title_match_signals,
     run_pipeline,
     validate_and_complete_groups,
     vacancy_similarity,
@@ -95,7 +108,7 @@ class SyntheticVacancyPipelineTests(unittest.TestCase):
         ]
 
     @patch("resume_evaluator.synthetic_vacancy_pipeline.chat")
-    def test_search_plan_uses_only_target_profile_and_expands_middle_ml(
+    def test_search_plan_uses_only_target_profile_and_expands_queries_generically(
         self,
         chat_mock: MagicMock,
     ) -> None:
@@ -127,7 +140,14 @@ class SyntheticVacancyPipelineTests(unittest.TestCase):
             message=MagicMock(
                 content=json.dumps(
                     {
-                        "profession": target,
+                        "profession": {
+                            **target,
+                            "role_family": "ML Engineering",
+                            "focus": "Model Development / Production ML",
+                            "aliases": ["Machine Learning Engineer"],
+                            "adjacent_specializations": ["AI Engineer"],
+                            "excluded_specializations": ["AI Infrastructure Engineer"],
+                        },
                         "search_queries": [
                             "ML Engineer",
                             "Machine Learning Engineer",
@@ -145,10 +165,16 @@ class SyntheticVacancyPipelineTests(unittest.TestCase):
         self.assertEqual(set(payload), {"target_profession"})
         self.assertEqual(payload["target_profession"]["core_skills"], [])
         self.assertEqual(plan.profession.core_skills, [])
-        self.assertIn("Middle ML Engineer", plan.search_queries)
-        self.assertIn("Mid-level Machine Learning Engineer", plan.search_queries)
-        self.assertIn("ML Engineer 2-4 years", plan.search_queries)
-        self.assertIn("ML-инженер мидл", plan.search_queries)
+        self.assertIn("Machine Learning Engineer", plan.search_queries)
+        self.assertIn('"ML Engineer" vacancy', plan.search_queries)
+        self.assertIn('"Machine Learning Engineer" vacancy', plan.search_queries)
+        self.assertIn('"ML Engineer" job', plan.search_queries)
+        self.assertIn(
+            "Middle ML Engineer Machine Learning / Artificial Intelligence",
+            plan.search_queries,
+        )
+        self.assertEqual(plan.profession.role_family, "ML Engineering")
+        self.assertEqual(plan.profession.aliases, ["Machine Learning Engineer"])
         self.assertLessEqual(len(plan.search_queries), 8)
 
     def test_middle_prefilter_excludes_explicit_senior_titles(self) -> None:
@@ -176,6 +202,54 @@ class SyntheticVacancyPipelineTests(unittest.TestCase):
             {item.title for item in filtered},
             {"Middle ML Engineer", "Machine Learning Engineer"},
         )
+
+    def test_job_board_query_strips_unsupported_web_phrase_operator(self) -> None:
+        self.assertEqual(_job_board_query('"ML Engineer" vacancy'), "ML Engineer")
+        self.assertEqual(_job_board_query('"Reporter" job'), "Reporter")
+        self.assertEqual(
+            _job_board_query("Middle ML Engineer Machine Learning"),
+            "Middle ML Engineer Machine Learning",
+        )
+
+    @patch("resume_evaluator.synthetic_vacancy_pipeline.chat")
+    def test_target_profile_can_be_built_from_direct_profession_query(
+        self,
+        chat_mock: MagicMock,
+    ) -> None:
+        chat_mock.return_value = MagicMock(
+            message=MagicMock(
+                content=json.dumps(
+                    {
+                        "profession": {
+                            "role": "Journalist",
+                            "specialization": "Корреспондент",
+                            "role_family": "Journalism",
+                            "domain": "Media",
+                            "focus": "News Reporting",
+                            "seniority": None,
+                            "aliases": ["Correspondent", "Reporter"],
+                            "adjacent_specializations": ["News Journalist"],
+                            "excluded_specializations": ["PR Manager"],
+                            "core_skills": [],
+                        },
+                        "search_queries": [
+                            "Корреспондент",
+                            "Correspondent",
+                            "News Reporter",
+                        ],
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        )
+
+        plan = build_target_profile("Корреспондент")
+
+        self.assertEqual(plan.profession.role, "Journalist")
+        self.assertEqual(plan.profession.specialization, "Корреспондент")
+        self.assertEqual(plan.profession.role_family, "Journalism")
+        self.assertIn("Reporter", plan.profession.aliases)
+        self.assertIn("PR Manager", plan.profession.excluded_specializations)
 
     def test_market_relevance_ignores_candidate_skills_and_vacancy_skills(self) -> None:
         target = {
@@ -304,6 +378,13 @@ class SyntheticVacancyPipelineTests(unittest.TestCase):
             "domain": "Digital Marketing / Web Analytics",
             "seniority": "Middle",
             "core_skills": ["Google Analytics", "PPC"],
+            "aliases": ["Web Traffic Analyst"],
+            "adjacent_specializations": ["Digital Marketing Analyst"],
+            "excluded_specializations": [
+                "Network Traffic",
+                "Road Traffic",
+                "Security Analyst",
+            ],
         }
 
         result = prefilter_vacancies(
@@ -372,14 +453,181 @@ class SyntheticVacancyPipelineTests(unittest.TestCase):
             return result
 
         embed_mock.side_effect = vectors
+        diagnostics: list[EmbeddingCandidateDiagnostic] = []
 
         result = embedding_filter_vacancies(
             [cyber, digital],
             profession,
             domain_threshold=0.6,
+            diagnostic_rows=diagnostics,
         )
 
         self.assertEqual([item.source_id for item in result], ["digital"])
+        by_id = {item.source_id: item for item in diagnostics}
+        self.assertTrue(by_id["digital"].passed_embedding_filter)
+        self.assertIsNone(by_id["digital"].rejection_reason)
+        self.assertFalse(by_id["cyber"].passed_embedding_filter)
+        self.assertEqual(
+            by_id["cyber"].rejection_reason,
+            "domain_similarity_below_threshold",
+        )
+
+    def test_hybrid_title_match_keeps_aliases_and_rejects_false_friends(self) -> None:
+        cases = [
+            (
+                TargetProfile(
+                    role="Engineer",
+                    specialization="ML Engineer",
+                    domain="Machine Learning",
+                    seniority="Middle",
+                    role_family="ML Engineering",
+                    focus="Model Development",
+                    core_skills=[],
+                    aliases=["Machine Learning Engineer"],
+                    adjacent_specializations=["AI Engineer"],
+                    excluded_specializations=["AI Infrastructure Engineer"],
+                ),
+                "Machine Learning Engineer",
+                "Frontend Engineer",
+            ),
+            (
+                TargetProfile(
+                    role="Journalist",
+                    specialization="Корреспондент",
+                    domain="Media",
+                    seniority=None,
+                    role_family="Journalism",
+                    focus="News Reporting",
+                    core_skills=[],
+                    aliases=["Correspondent", "Reporter"],
+                    excluded_specializations=[],
+                ),
+                "Reporter",
+                "General Counsel",
+            ),
+            (
+                TargetProfile(
+                    role="Communications Specialist",
+                    specialization="PR-специалист",
+                    domain="Communications",
+                    seniority=None,
+                    role_family="Public Relations",
+                    focus="Media Relations",
+                    core_skills=[],
+                    aliases=["PR Specialist", "Public Relations Specialist"],
+                    excluded_specializations=[],
+                ),
+                "Public Relations Specialist",
+                "HR Specialist",
+            ),
+        ]
+
+        for profile, synonym, false_friend in cases:
+            with self.subTest(synonym=synonym):
+                accepted = title_match_signals(
+                    profile,
+                    synonym,
+                    dense_similarity=0.80,
+                )
+                rejected = title_match_signals(
+                    profile,
+                    false_friend,
+                    dense_similarity=0.95,
+                )
+                self.assertTrue(accepted.has_lexical_support)
+                self.assertFalse(rejected.has_lexical_support)
+                self.assertTrue(rejected.semantic_only)
+                self.assertLess(rejected.title_match_score, accepted.title_match_score)
+
+    def test_hybrid_title_match_penalizes_adjacent_and_rejects_excluded(self) -> None:
+        profile = TargetProfile(
+            role="Engineer",
+            specialization="ML Engineer",
+            domain="Machine Learning",
+            seniority="Middle",
+            role_family="ML Engineering",
+            focus="Model Development",
+            core_skills=[],
+            aliases=["Machine Learning Engineer"],
+            adjacent_specializations=["AI Engineer"],
+            excluded_specializations=["AI Infrastructure Engineer"],
+        )
+
+        exact = title_match_signals(profile, "Middle ML Engineer", dense_similarity=0.8)
+        adjacent = title_match_signals(profile, "AI Engineer", dense_similarity=0.8)
+        excluded = title_match_signals(
+            profile,
+            "AI Infrastructure Engineer",
+            dense_similarity=0.9,
+        )
+
+        self.assertTrue(adjacent.adjacent_match)
+        self.assertLess(adjacent.title_match_score, exact.title_match_score)
+        self.assertTrue(excluded.excluded_match)
+        self.assertEqual(excluded.title_match_score, 0)
+
+    def test_noop_reranker_benchmark_reports_precision_and_time(self) -> None:
+        profile = TargetProfile(
+            role="Journalist",
+            specialization="Correspondent",
+            domain="Media",
+            seniority=None,
+            role_family="Journalism",
+            focus="News Reporting",
+            core_skills=[],
+            aliases=["Reporter"],
+            adjacent_specializations=[],
+            excluded_specializations=[],
+        )
+        labeled = [
+            (self._raw("good", "Reporter", "News"), True),
+            (self._raw("bad", "General Counsel", "Legal"), False),
+        ]
+
+        result = benchmark_title_reranker(profile, labeled, cutoff=1)
+
+        self.assertEqual(result.precision_at_cutoff, 1.0)
+        self.assertEqual(result.candidates, 2)
+        self.assertGreaterEqual(result.elapsed_seconds, 0)
+
+    @patch("resume_evaluator.synthetic_vacancy_pipeline._embed_text_map")
+    def test_embedding_filter_does_not_accept_semantic_only_title(
+        self,
+        embed_mock: MagicMock,
+    ) -> None:
+        profile = TargetProfile(
+            role="Engineer",
+            specialization="ML Engineer",
+            domain="Machine Learning",
+            seniority="Middle",
+            role_family="ML Engineering",
+            focus="Model Development",
+            core_skills=[],
+            aliases=["Machine Learning Engineer"],
+            adjacent_specializations=[],
+            excluded_specializations=[],
+        )
+        good = self._raw("ml", "Machine Learning Engineer", "Build ML models")
+        false_friend = self._raw("frontend", "Frontend Engineer", "Build products")
+        embed_mock.side_effect = lambda texts, model: {
+            text: [1.0, 0.0] for text in texts
+        }
+        diagnostics: list[EmbeddingCandidateDiagnostic] = []
+
+        result = embedding_filter_vacancies(
+            [false_friend, good],
+            profile,
+            domain_threshold=-1,
+            diagnostic_rows=diagnostics,
+        )
+
+        self.assertEqual([item.source_id for item in result], ["ml"])
+        by_id = {item.source_id: item for item in diagnostics}
+        self.assertTrue(by_id["frontend"].semantic_only)
+        self.assertEqual(
+            by_id["frontend"].rejection_reason,
+            "semantic_only_without_lexical_support",
+        )
 
     @patch("resume_evaluator.synthetic_vacancy_pipeline.chat")
     def test_retries_truncated_normalization_response(
@@ -735,6 +983,247 @@ class SyntheticVacancyPipelineTests(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertEqual(normalize_skill_name(value), expected)
 
+    def test_classified_requirements_exclude_soft_education_and_domain(self) -> None:
+        vacancy = make_vacancy(
+            "classified",
+            required=[
+                "Python",
+                "TensorFlow",
+                "Communication",
+                "PhD in Computer Science",
+                "Experience with ad tech",
+            ],
+        ).model_copy(
+            update={
+                "professional_skills": ["Python"],
+                "tools_and_technologies": ["TensorFlow"],
+                "soft_skills": ["Communication"],
+                "education_requirements": ["PhD in Computer Science"],
+                "domain_knowledge": ["Experience with ad tech"],
+                "professional_requirements_detected": True,
+                "extraction_status": "ok",
+            }
+        )
+
+        groups = build_skill_groups_python([vacancy])
+        values = {group.canonical_text for group in groups}
+        serialized = vacancy.model_dump()
+
+        self.assertEqual(values, {"Python", "TensorFlow"})
+        self.assertEqual(serialized["professional_skills"], ["Python"])
+        self.assertNotIn("technical_skills", serialized)
+        self.assertNotIn("Communication", values)
+        self.assertNotIn("PhD in Computer Science", values)
+        self.assertNotIn("Experience with ad tech", values)
+
+    def test_extraction_quality_distinguishes_empty_failed_and_sparse(self) -> None:
+        profession = {
+            "role": "Engineer",
+            "specialization": "ML Engineer",
+            "domain": "Machine Learning",
+            "seniority": "Middle",
+            "role_family": "ML Engineering",
+            "focus": "Model Development / Production ML",
+            "core_skills": [],
+        }
+
+        def extracted(tools: list[str]) -> ExtractedVacancy:
+            return ExtractedVacancy(
+                source_id="q",
+                profession=profession,
+                is_relevant=True,
+                required_skills=tools,
+                preferred_skills=[],
+                professional_skills=[],
+                tools_and_technologies=tools,
+                soft_skills=[],
+                education_requirements=[],
+                domain_knowledge=[],
+                extraction_status="ok",
+                professional_requirements_detected=False,
+                responsibilities=[],
+                experience_years_min=None,
+                education_level=None,
+                education_field=None,
+                employment_type=None,
+                work_format=None,
+                conditions=[],
+            )
+
+        no_requirements = self._raw("q", "ML Engineer", "Build useful models")
+        failed_source = self._raw(
+            "q",
+            "ML Engineer",
+            "Requirements: experience with Python, TensorFlow and SQL",
+        )
+
+        self.assertEqual(
+            _set_extraction_quality(extracted([]), no_requirements).extraction_status,
+            "empty",
+        )
+        self.assertEqual(
+            _set_extraction_quality(extracted([]), failed_source).extraction_status,
+            "failed",
+        )
+        self.assertEqual(
+            _set_extraction_quality(extracted(["Python"]), failed_source).extraction_status,
+            "sparse",
+        )
+        self.assertEqual(
+            _set_extraction_quality(
+                extracted(["Python", "TensorFlow"]), failed_source
+            ).extraction_status,
+            "ok",
+        )
+
+        with patch(
+            "resume_evaluator.synthetic_vacancy_pipeline."
+            "_normalize_batch_with_fallback"
+        ) as retry_mock:
+            retry_mock.return_value = MagicMock(
+                vacancies=[extracted(["Python", "TensorFlow"])]
+            )
+            recovered = _quality_checked_extraction(
+                extracted([]),
+                failed_source,
+                profession_from_value(profession),
+            )
+
+        self.assertEqual(recovered.extraction_status, "ok")
+        retry_mock.assert_called_once()
+
+    def test_ml_focus_excludes_adjacent_infrastructure_and_data_science(self) -> None:
+        target = {
+            "role": "Engineer",
+            "specialization": "ML Engineer",
+            "domain": "Machine Learning",
+            "seniority": "Middle",
+            "role_family": "ML Engineering",
+            "focus": "Model Development / Production ML",
+            "core_skills": [],
+        }
+        core = make_vacancy("core", profession="ML Engineer")
+        core.profession.role_family = "ML Engineering"
+        core.profession.focus = "Model Development / Production ML"
+        infrastructure = make_vacancy("infra", profession="ML Engineer")
+        infrastructure.profession.role_family = "ML Infrastructure"
+        infrastructure.profession.focus = "AI Infrastructure"
+        data_science = make_vacancy("ds", profession="ML Engineer")
+        data_science.profession.role_family = "Data Science"
+        data_science.profession.focus = "Decision Intelligence"
+
+        self.assertEqual(_focus_compatibility(target, core), 1.0)
+        self.assertEqual(_focus_compatibility(target, infrastructure), 0.0)
+        self.assertEqual(_focus_compatibility(target, data_science), 0.0)
+
+    def test_universal_market_profile_regressions(self) -> None:
+        cases = [
+            TargetProfile(
+                role="Engineer",
+                specialization="ML Engineer",
+                role_family="ML Engineering",
+                domain="Machine Learning",
+                focus="Model Development / Production ML",
+                seniority="Middle",
+                aliases=["Machine Learning Engineer"],
+                adjacent_specializations=["AI Engineer"],
+                excluded_specializations=["AI Infrastructure Engineer"],
+                core_skills=[],
+            ),
+            TargetProfile(
+                role="Journalist",
+                specialization="Корреспондент",
+                role_family="Journalism",
+                domain="Media",
+                focus="News Reporting",
+                seniority="Middle",
+                aliases=["Correspondent", "Reporter", "News Reporter"],
+                adjacent_specializations=["News Journalist"],
+                excluded_specializations=["PR Manager"],
+                core_skills=[],
+            ),
+            TargetProfile(
+                role="Marketer",
+                specialization="Маркетолог",
+                role_family="Marketing",
+                domain="Marketing",
+                focus="Brand Marketing",
+                seniority="Middle",
+                aliases=["Marketing Specialist", "Marketer"],
+                adjacent_specializations=["Performance Marketer"],
+                excluded_specializations=["PR Manager"],
+                core_skills=[],
+            ),
+            TargetProfile(
+                role="Communications Specialist",
+                specialization="PR-специалист",
+                role_family="Public Relations",
+                domain="Communications",
+                focus="Media Relations",
+                seniority="Middle",
+                aliases=["PR Specialist", "Public Relations Specialist"],
+                adjacent_specializations=["Communications Manager"],
+                excluded_specializations=["Correspondent", "Reporter"],
+                core_skills=[],
+            ),
+        ]
+
+        for profile in cases:
+            with self.subTest(profile=profile.specialization):
+                started = time.perf_counter()
+                queries = _expand_search_queries(profile, [])
+                self.assertIn(profile.specialization, queries)
+                self.assertTrue(set(profile.aliases) & set(queries))
+                self.assertTrue(any(profile.seniority in query for query in queries))
+
+                market: list[NormalizedVacancy] = []
+                good_titles = [profile.specialization, *profile.aliases[:2]]
+                while len(good_titles) < 3:
+                    good_titles.append(profile.specialization)
+                for index, title in enumerate(good_titles[:3]):
+                    vacancy = make_vacancy(
+                        f"{profile.specialization}-good-{index}",
+                        profession=title,
+                        required=["Профессиональная компетенция"],
+                        responsibilities=["Выполнять профильные обязанности"],
+                    )
+                    vacancy.profession.role = profile.role
+                    vacancy.profession.specialization = title
+                    vacancy.profession.role_family = profile.role_family
+                    vacancy.profession.domain = profile.domain
+                    vacancy.profession.focus = profile.focus
+                    vacancy.profession.seniority = profile.seniority
+                    vacancy.embedding_role_similarity = 0.9
+                    vacancy.embedding_specialization_similarity = 0.9
+                    vacancy.embedding_domain_similarity = 0.9
+                    vacancy.embedding_content_similarity = 0.9
+                    market.append(vacancy)
+
+                excluded_title = profile.excluded_specializations[0]
+                excluded = make_vacancy("excluded", profession=excluded_title)
+                excluded.profession.specialization = excluded_title
+                excluded.profession.role_family = profile.role_family
+                excluded.profession.domain = profile.domain
+                excluded.profession.focus = profile.focus
+                excluded.profession.seniority = profile.seniority
+                excluded.embedding_role_similarity = 0.9
+                excluded.embedding_specialization_similarity = 0.9
+                excluded.embedding_domain_similarity = 0.9
+                excluded.embedding_content_similarity = 0.9
+                market.append(excluded)
+
+                calculate_relevance_scores(market, profile)
+                eligible = _eligible_market_vacancies(market, profile)
+                selection = evaluate_best_triplet(eligible, profile)
+
+                self.assertEqual(len(eligible), 3)
+                self.assertNotIn("excluded", {item.source_id for item in eligible})
+                self.assertTrue(all(item.extraction_status == "ok" for item in eligible))
+                self.assertIsNotNone(selection)
+                assert selection is not None
+                self.assertIn(selection.confidence, {"medium", "high"})
+                self.assertLess(time.perf_counter() - started, 1.0)
+
     def test_special_skills_keep_original_evidence_and_discard_junk(self) -> None:
         technologies = ["R", "C", "C++", "C#", ".NET", "F#", "R&D", "Python"]
         selected = [
@@ -934,6 +1423,42 @@ class SyntheticVacancyPipelineTests(unittest.TestCase):
         self.assertEqual(python.frequency, 6)
         self.assertEqual(len(python.source_urls), 6)
 
+    def test_frequency_thresholds_follow_actual_market_sample_size(self) -> None:
+        for size in range(3, 7):
+            with self.subTest(size=size):
+                required_count = (2 * size + 2) // 3
+                market = []
+                for index in range(size):
+                    skills = ["Common"] if index < required_count else []
+                    if index < 2:
+                        skills.append("Repeated")
+                    if index == 0:
+                        skills.append("Unique")
+                    market.append(make_vacancy(f"n{size}-{index}", required=skills))
+                result = aggregate_synthetic_vacancy(
+                    "Универсальная профессия",
+                    market[:3],
+                    ConceptGrouping(skill_groups=[], responsibility_groups=[]),
+                    PipelineStatistics(
+                        search_queries=[],
+                        public_vacancies_found=size,
+                        vacancies_after_deduplication=size,
+                        relevant_vacancies=size,
+                        source_errors=[],
+                    ),
+                    market_vacancies=market,
+                )
+
+                self.assertIn("Common", result.required_skills)
+                if required_count == 2:
+                    self.assertIn("Repeated", result.required_skills)
+                else:
+                    self.assertIn("Repeated", result.preferred_skills)
+                self.assertIn(
+                    "Unique",
+                    {item.value for item in result.market_variations},
+                )
+
     def test_responsibility_clustering_splits_merely_related_tasks(self) -> None:
         broad_group = ConceptGroup(
             canonical_text="Design data and feature pipelines",
@@ -1066,6 +1591,11 @@ class SyntheticVacancyPipelineTests(unittest.TestCase):
             result = run_pipeline(resume_path, output_path)
 
             self.assertTrue(output_path.is_file())
+            self.assertTrue(
+                output_path.with_name(
+                    "synthetic_vacancy.retrieval_diagnostics.json"
+                ).is_file()
+            )
             compatible = VacancyData.model_validate_json(
                 output_path.read_text(encoding="utf-8")
             )
@@ -1075,6 +1605,97 @@ class SyntheticVacancyPipelineTests(unittest.TestCase):
             self.assertEqual(result.triplet_metrics.triplet_score, 0.8)
             normalized_input = normalize_mock.call_args.args[0]
             self.assertEqual(len(normalized_input), 8)
+
+    @patch(
+        "resume_evaluator.synthetic_vacancy_pipeline.group_selected_concepts"
+    )
+    @patch("resume_evaluator.synthetic_vacancy_pipeline.evaluate_best_triplet")
+    @patch("resume_evaluator.synthetic_vacancy_pipeline.normalize_vacancies")
+    @patch("resume_evaluator.synthetic_vacancy_pipeline.embedding_filter_vacancies")
+    @patch("resume_evaluator.synthetic_vacancy_pipeline.search_public_vacancies")
+    @patch("resume_evaluator.synthetic_vacancy_pipeline.build_search_plan")
+    def test_pipeline_expands_normalization_pool_until_six_valid_vacancies(
+        self,
+        plan_mock,
+        search_mock,
+        embedding_mock,
+        normalize_mock,
+        selection_mock,
+        grouping_mock,
+    ) -> None:
+        plan_mock.return_value = ProfessionSearchPlan(
+            target_profession="Корреспондент",
+            search_queries=["Корреспондент", "Reporter", "News Reporter"],
+        )
+        raw = [
+            self._raw(str(index), "Корреспондент", "Новости и репортажи")
+            for index in range(20)
+        ]
+        search_mock.return_value = (raw, [])
+        embedding_mock.return_value = raw[:16]
+        market = [
+            make_vacancy(
+                f"market-{index}",
+                profession="Корреспондент",
+                required=["Интервьюирование"],
+            )
+            for index in range(6)
+        ]
+
+        def normalized_for_batch(candidates, *_args, **_kwargs):
+            counts = {8: 2, 12: 4, 16: 6}
+            return market[:counts[len(candidates)]]
+
+        normalize_mock.side_effect = normalized_for_batch
+        selection_mock.return_value = TripletSelection(
+            vacancies=market[:3],
+            metrics=TripletMetrics(
+                triplet_score=0.8,
+                profession_relevance=0.8,
+                domain_similarity=0.8,
+                mutual_similarity=0.8,
+            ),
+            confidence="high",
+        )
+        grouping_mock.return_value = ConceptGrouping(
+            skill_groups=[],
+            responsibility_groups=[],
+        )
+        resume_data = {
+            "candidate_name": None,
+            "target_position": "Корреспондент",
+            "professional_summary": None,
+            "contact_channels": [],
+            "skills": [],
+            "soft_skills": [],
+            "work_experience": [],
+            "education": [],
+            "projects": [],
+            "courses_and_certifications": [],
+            "languages": [],
+            "achievements": [],
+            "portfolio_links": [],
+        }
+
+        with tempfile.TemporaryDirectory() as directory:
+            resume_path = Path(directory) / "resume.json"
+            output_path = Path(directory) / "synthetic_vacancy.json"
+            resume_path.write_text(
+                json.dumps(resume_data, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            result = run_pipeline(resume_path, output_path)
+
+        self.assertEqual(
+            [len(call.args[0]) for call in normalize_mock.call_args_list],
+            [8, 12, 16],
+        )
+        self.assertEqual(result.market_vacancy_count, 6)
+        self.assertEqual(result.pipeline_statistics.relevant_vacancies, 6)
+        self.assertEqual(
+            result.pipeline_statistics.vacancies_selected_for_normalization,
+            16,
+        )
 
     def _grouping(self) -> ConceptGrouping:
         return ConceptGrouping(

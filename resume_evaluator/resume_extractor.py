@@ -1,19 +1,24 @@
 """Извлечение структурированного резюме из текста с помощью Ollama."""
+from .runtime import atomic_write_text
+
 
 import argparse
+import re
 import time
 from pathlib import Path
 from typing import Any
 
-from ollama import chat
+from .model_runtime import chat
 from pydantic import BaseModel, Field, model_validator
 
 from .document_reader import read_document
 from .profession import ProfessionProfile, profession_from_value
 
 
-MODEL_NAME = "gemma4:12b"
-MODEL_CONTEXT_SIZE = 16384
+from .settings import get_settings
+
+MODEL_NAME = get_settings().model
+MODEL_CONTEXT_SIZE = get_settings().context_size
 MAX_OUTPUT_TOKENS = 8192
 
 
@@ -99,7 +104,8 @@ SYSTEM_PROMPT = """
 - role — базовая функция (например Analyst, Developer, Designer);
 - specialization — конкретная специализация (например Traffic Analyst);
 - domain — предметная область (например Digital Marketing / Web Analytics);
-- seniority — уровень Junior, Middle, Senior или иной явно обоснованный уровень;
+- seniority — только явно указанный уровень Junior, Middle, Senior или иной;
+  не определяй его по продолжительности опыта, навыкам или сложности проектов;
 - core_skills — только навыки из резюме, которые подтверждают эту профессию.
 
 Если желаемая должность указана явно, она имеет приоритет. Недостающие части
@@ -112,12 +118,16 @@ SYSTEM_PROMPT = """
 2. Образование не добавляй в опыт, а проекты — в места работы без основания.
 3. В responsibilities сохраняй задачи, в technologies — связанные технологии,
    в achievements — результаты, особенно числа и проценты.
-4. Общие навыки сохраняй в skills и не приписывай последнему месту работы.
+4. В skills сохраняй все явно названные профессиональные навыки, инструменты и
+   технологии из всего документа, включая технологии мест работы и проектов.
+   Не приписывай общий навык конкретному месту работы без явной связи.
 5. В contact_channels записывай виды связи, но не адреса и номера.
 6. В portfolio_links включай только профессиональные материалы.
 7. Каждое место работы, образование и проект возвращай отдельным элементом.
 8. Если сведений нет, используй null или пустой список.
 9. Обработай документ полностью и верни только JSON заданной схемы.
+10. Не достраивай оборванные пункты и не придумывай отсутствующие разделы.
+    Если образования в документе нет, education должен быть пустым списком.
 """
 
 
@@ -130,6 +140,39 @@ def _is_candidate_name_placeholder(candidate_name: str) -> bool:
         character for character in candidate_name.casefold() if character.isalnum()
     )
     return normalized_name in {"фио", "фамилияимяотчество"}
+
+
+def _unique_explicit_values(values: list[str]) -> list[str]:
+    """Удаляет повторы, не меняя исходное написание явно указанного навыка."""
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        cleaned = " ".join(value.split())
+        if not cleaned:
+            continue
+        key = cleaned.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(cleaned)
+    return result
+
+
+def _reconcile_explicit_skills(resume: ResumeData) -> ResumeData:
+    """Возвращает в общий список технологии, уже извлечённые из опыта/проектов.
+
+    LLM иногда корректно связывает инструмент с конкретным местом работы или
+    проектом, но забывает продублировать его в агрегированном поле ``skills``.
+    Здесь нет нового semantic extraction: функция объединяет только значения,
+    которые уже присутствуют в структурированном результате модели.
+    """
+    explicit_skills = [*resume.skills]
+    for experience in resume.work_experience:
+        explicit_skills.extend(experience.technologies)
+    for project in resume.projects:
+        explicit_skills.extend(project.technologies)
+    resume.skills = _unique_explicit_values(explicit_skills)
+    return resume
 
 
 def extract_resume(resume_text: str) -> ResumeData:
@@ -148,14 +191,43 @@ def extract_resume(resume_text: str) -> ResumeData:
         },
     )
     resume = ResumeData.model_validate_json(response.message.content)
+    resume = _retain_explicit_seniority(resume, resume_text)
+    resume = _reconcile_explicit_skills(resume)
     if resume.candidate_name and _is_candidate_name_placeholder(resume.candidate_name):
         resume.candidate_name = None
     return resume
 
 
+def _retain_explicit_seniority(resume: ResumeData, text: str) -> ResumeData:
+    """Не сохраняет уровень, который модель вывела только по стажу/проектам."""
+    level = resume.target_profession.seniority
+    if not level:
+        return resume
+    equivalents = (
+        ("junior", "jr", "джуниор", "джун", "младший", "младшая"),
+        ("middle", "mid-level", "мидл", "миддл"),
+        ("senior", "sr", "сеньор", "старший", "старшая"),
+        ("lead", "лид", "ведущий", "ведущая"),
+        ("staff",), ("principal",), ("head", "руководитель"),
+    )
+    groups = [group for group in equivalents if any(
+        re.search(rf"(?<!\w){re.escape(value)}(?!\w)", level, re.IGNORECASE)
+        for value in group
+    )]
+    if groups:
+        confirmed = all(any(re.search(
+            rf"(?<!\w){re.escape(value)}(?!\w)", text, re.IGNORECASE
+        ) for value in group) for group in groups)
+    else:
+        confirmed = bool(re.search(rf"(?<!\w){re.escape(level)}(?!\w)", text, re.IGNORECASE))
+    if not confirmed:
+        resume.target_profession.seniority = None
+    return resume
+
+
 def save_result(resume: ResumeData, output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(resume.model_dump_json(indent=2), encoding="utf-8")
+    atomic_write_text(output_path, resume.model_dump_json(indent=2))
 
 
 def parse_arguments() -> argparse.Namespace:

@@ -1,17 +1,24 @@
 """Независимая оценка качества резюме без привязки к вакансии."""
+from .runtime import atomic_write_text
+
 
 import argparse
+import json
+import re
 import time
 from pathlib import Path
+from typing import Any
 
-from ollama import chat
+from .model_runtime import chat
 from pydantic import BaseModel, Field
 
 from .document_reader import read_document
 
 
-MODEL_NAME = "gemma4:12b"
-MODEL_CONTEXT_SIZE = 16384
+from .settings import get_settings
+
+MODEL_NAME = get_settings().model
+MODEL_CONTEXT_SIZE = get_settings().context_size
 MAX_OUTPUT_TOKENS = 8192
 
 EVALUATION_GOAL = (
@@ -128,6 +135,155 @@ SECTION_CONFIG = (
 )
 
 
+# ResumeEvaluation оценивает качество резюме, а не делает свободные выводы о
+# технологическом стеке. Реестр намеренно задаёт только настоящие aliases, а
+# не связанные технологии: например, Keras не является alias для TensorFlow.
+_SKILL_ALIASES: dict[str, tuple[str, ...]] = {
+    "Keras": ("keras", "tf.keras", "tensorflow.keras"),
+    "PyTorch": ("pytorch", "torch", "torch.nn"),
+    "TensorFlow": ("tensorflow", "tf.keras", "tensorflow.keras"),
+    "MySQL": ("mysql",),
+    "PostgreSQL": ("postgresql", "postgres", "postgres sql"),
+    "OpenCV": ("opencv", "cv2"),
+    "Computer Vision": (
+        "computer vision",
+        "компьютерное зрение",
+        "компьютерному зрению",
+        "компьютерного зрения",
+        "cv",
+    ),
+    "scikit-learn": ("scikit-learn", "scikit learn", "sklearn"),
+}
+
+# Компетенция может быть доказана конкретной задачей в опыте или проектах даже
+# без отдельной строки в skills. Для именованных инструментов такой вывод не
+# делается: один инструмент никогда не служит доказательством другого.
+_CONCRETE_SKILL_EVIDENCE: dict[str, tuple[tuple[str, ...], ...]] = {
+    "Computer Vision": (
+        ("классификац", "изображ"),
+        ("детекц", "объект"),
+        ("сегментац", "изображ"),
+        ("image", "classification"),
+        ("object", "detection"),
+        ("image", "segmentation"),
+    ),
+}
+
+_EVIDENCE_SECTION_KEYS = {
+    "experience",
+    "work_experience",
+    "projects",
+    "project_experience",
+    "achievements",
+}
+
+
+def _alias_is_mentioned(text: str, alias: str) -> bool:
+    """Ищет самостоятельный alias, не совпадающий с частью другого слова."""
+    escaped = re.escape(alias.casefold().replace("ё", "е"))
+    escaped = escaped.replace(r"\ ", r"\s+")
+    normalized = text.casefold().replace("ё", "е")
+    return re.search(
+        rf"(?<![a-zа-я0-9]){escaped}(?![a-zа-я0-9])",
+        normalized,
+    ) is not None
+
+
+def _collect_text(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return [item for entry in value for item in _collect_text(entry)]
+    if isinstance(value, dict):
+        return [item for entry in value.values() for item in _collect_text(entry)]
+    return []
+
+
+def _experience_and_projects_text(resume_text: str) -> str:
+    """Ограничивает неявные доказательства опытом, проектами и достижениями."""
+    try:
+        payload = json.loads(resume_text)
+    except (json.JSONDecodeError, TypeError):
+        # Для неструктурированного PDF/DOCX остаются только конкретные паттерны;
+        # определить границы разделов надёжно невозможно.
+        return resume_text
+    if not isinstance(payload, dict):
+        return ""
+    sections = [
+        payload[key]
+        for key in _EVIDENCE_SECTION_KEYS
+        if key in payload
+    ]
+    return "\n".join(_collect_text(sections))
+
+
+def _skill_is_supported(
+    skill_name: str,
+    resume_text: str,
+    evidence_text: str,
+) -> bool:
+    aliases = _SKILL_ALIASES[skill_name]
+    if any(_alias_is_mentioned(resume_text, alias) for alias in aliases):
+        return True
+    normalized_evidence = evidence_text.casefold().replace("ё", "е")
+    return any(
+        all(fragment in normalized_evidence for fragment in pattern)
+        for pattern in _CONCRETE_SKILL_EVIDENCE.get(skill_name, ())
+    )
+
+
+def unsupported_skill_claims(claim: str, resume_text: str) -> list[str]:
+    """Возвращает конкретные навыки, заявленные моделью без evidence."""
+    evidence_text = _experience_and_projects_text(resume_text)
+    return [
+        skill_name
+        for skill_name, aliases in _SKILL_ALIASES.items()
+        if any(_alias_is_mentioned(claim, alias) for alias in aliases)
+        and not _skill_is_supported(skill_name, resume_text, evidence_text)
+    ]
+
+
+def _remove_unsupported_sentences(text: str, resume_text: str) -> str:
+    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
+    supported = [
+        sentence
+        for sentence in sentences
+        if sentence and not unsupported_skill_claims(sentence, resume_text)
+    ]
+    return " ".join(supported)
+
+
+def audit_skill_claims(
+    generated: GeneratedResumeEvaluation,
+    resume_text: str,
+) -> GeneratedResumeEvaluation:
+    """Удаляет только неподтверждённые положительные claims, не меняя баллы."""
+    audited = generated.model_copy(deep=True)
+    for section_name, _ in SECTION_CONFIG:
+        section = getattr(audited, section_name)
+        section.strengths = [
+            claim
+            for claim in section.strengths
+            if not unsupported_skill_claims(claim, resume_text)
+        ]
+        cleaned_justification = _remove_unsupported_sentences(
+            section.justification,
+            resume_text,
+        )
+        section.justification = cleaned_justification or (
+            "Оценка основана только на явно указанных сведениях резюме."
+        )
+
+    cleaned_summary = _remove_unsupported_sentences(
+        audited.overall_summary,
+        resume_text,
+    )
+    audited.overall_summary = cleaned_summary or (
+        "Вывод основан только на явно указанных сведениях резюме."
+    )
+    return audited
+
+
 SYSTEM_PROMPT = """
 Ты — эксперт центра карьеры. Оцени качество самого резюме без вакансии и без
 предположений о том, подходит ли кандидат для какой-либо конкретной работы.
@@ -140,6 +296,15 @@ SYSTEM_PROMPT = """
 додумывай опыт, результаты, навыки или образование. Отсутствующий раздел
 получает 0 баллов, пустой или формальный раздел — только баллы за реально
 присутствующую информацию.
+
+Навык можно считать присутствующим только при явном упоминании, известном alias
+или конкретном подтверждении в опыте/проектах. Технологическая связь не является
+доказательством владения: Keras не подтверждает PyTorch или TensorFlow (если
+TensorFlow-контекст не назван явно), MySQL не подтверждает PostgreSQL, OpenCV сам
+по себе не подтверждает более широкую компетенцию Computer Vision, а
+scikit-learn не подтверждает PyTorch. Не объединяй разные инструменты через
+слэши и не используй формулировки «подразумевается», «вероятно знаком» или их
+аналоги в сильных сторонах и обосновании.
 
 Оцени каждый раздел отдельно по следующей рубрике:
 
@@ -229,9 +394,10 @@ def evaluate_resume(resume_text: str) -> GeneratedResumeEvaluation:
             "num_predict": MAX_OUTPUT_TOKENS,
         },
     )
-    return GeneratedResumeEvaluation.model_validate_json(
+    generated = GeneratedResumeEvaluation.model_validate_json(
         response.message.content,
     )
+    return audit_skill_claims(generated, resume_text)
 
 
 def make_quality_level(total_score: float) -> str:
@@ -273,9 +439,8 @@ def build_result(
 
 def save_result(result: ResumeQualityResult, output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(
+    atomic_write_text(output_path,
         result.model_dump_json(indent=2),
-        encoding="utf-8",
     )
 
 

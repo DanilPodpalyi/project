@@ -4,7 +4,16 @@ __pycache__/
 .vscode/
 .pytest_cache/
 .coverage
-examples/
+.ruff_cache/
+.testdeps/
+.venv*/
+build/
+dist/
+*.egg-info/
+.env
+config.toml
+*.tmp
+examples/legacy/
 
 data/
 output/

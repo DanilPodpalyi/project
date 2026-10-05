@@ -1,7 +1,7 @@
-"""Запуск полного конвейера командой ``python -m resume_evaluator``."""
+"""Основной CLI командой ``python -m resume_evaluator``."""
 
-from .pipeline import main
+from .cli import main
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

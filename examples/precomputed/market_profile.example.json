@@ -1,0 +1,238 @@
+{
+  "status": "ok",
+  "target": {
+    "role": "Engineer",
+    "specialization": "ML Engineer",
+    "domain": "Machine Learning / Artificial Intelligence",
+    "seniority": "Middle",
+    "role_family": "ML Engineering",
+    "focus": "Model Development / Production ML"
+  },
+  "sample_size": 4,
+  "professional_skills": [
+    {
+      "name": "Machine Learning",
+      "frequency": 4,
+      "coverage": 1.0,
+      "importance": "common",
+      "sources": [
+        {
+          "source": "example",
+          "source_id": "example:1",
+          "title": "Middle Machine Learning Engineer",
+          "employer": "Company A",
+          "url": "https://jobs.example/1",
+          "published_at": "2026-09-20T10:00:00+00:00",
+          "target_relevance": 0.91
+        },
+        {
+          "source": "example",
+          "source_id": "example:2",
+          "title": "ML Engineer",
+          "employer": "Company B",
+          "url": "https://jobs.example/2",
+          "published_at": "2026-09-19T10:00:00+00:00",
+          "target_relevance": 0.88
+        },
+        {
+          "source": "example",
+          "source_id": "example:3",
+          "title": "Machine Learning Engineer",
+          "employer": "Company C",
+          "url": "https://jobs.example/3",
+          "published_at": "2026-09-18T10:00:00+00:00",
+          "target_relevance": 0.86
+        },
+        {
+          "source": "example",
+          "source_id": "example:4",
+          "title": "ML Engineer, Product Models",
+          "employer": "Company D",
+          "url": "https://jobs.example/4",
+          "published_at": "2026-09-17T10:00:00+00:00",
+          "target_relevance": 0.82
+        }
+      ],
+      "source_values": ["Machine Learning"]
+    }
+  ],
+  "tools_and_technologies": [
+    {
+      "name": "Python",
+      "frequency": 4,
+      "coverage": 1.0,
+      "importance": "common",
+      "sources": [
+        {
+          "source": "example",
+          "source_id": "example:1",
+          "title": "Middle Machine Learning Engineer",
+          "employer": "Company A",
+          "url": "https://jobs.example/1",
+          "published_at": "2026-09-20T10:00:00+00:00",
+          "target_relevance": 0.91
+        },
+        {
+          "source": "example",
+          "source_id": "example:2",
+          "title": "ML Engineer",
+          "employer": "Company B",
+          "url": "https://jobs.example/2",
+          "published_at": "2026-09-19T10:00:00+00:00",
+          "target_relevance": 0.88
+        },
+        {
+          "source": "example",
+          "source_id": "example:3",
+          "title": "Machine Learning Engineer",
+          "employer": "Company C",
+          "url": "https://jobs.example/3",
+          "published_at": "2026-09-18T10:00:00+00:00",
+          "target_relevance": 0.86
+        },
+        {
+          "source": "example",
+          "source_id": "example:4",
+          "title": "ML Engineer, Product Models",
+          "employer": "Company D",
+          "url": "https://jobs.example/4",
+          "published_at": "2026-09-17T10:00:00+00:00",
+          "target_relevance": 0.82
+        }
+      ],
+      "source_values": ["Python"]
+    },
+    {
+      "name": "PyTorch",
+      "frequency": 2,
+      "coverage": 0.5,
+      "importance": "additional",
+      "sources": [
+        {
+          "source": "example",
+          "source_id": "example:1",
+          "title": "Middle Machine Learning Engineer",
+          "employer": "Company A",
+          "url": "https://jobs.example/1",
+          "published_at": "2026-09-20T10:00:00+00:00",
+          "target_relevance": 0.91
+        },
+        {
+          "source": "example",
+          "source_id": "example:2",
+          "title": "ML Engineer",
+          "employer": "Company B",
+          "url": "https://jobs.example/2",
+          "published_at": "2026-09-19T10:00:00+00:00",
+          "target_relevance": 0.88
+        }
+      ],
+      "source_values": ["PyTorch"]
+    }
+  ],
+  "responsibilities": [
+    {
+      "name": "Разработка и обучение ML-моделей",
+      "frequency": 3,
+      "coverage": 0.75,
+      "importance": "common",
+      "sources": [
+        {
+          "source": "example",
+          "source_id": "example:1",
+          "title": "Middle Machine Learning Engineer",
+          "employer": "Company A",
+          "url": "https://jobs.example/1",
+          "published_at": "2026-09-20T10:00:00+00:00",
+          "target_relevance": 0.91
+        },
+        {
+          "source": "example",
+          "source_id": "example:2",
+          "title": "ML Engineer",
+          "employer": "Company B",
+          "url": "https://jobs.example/2",
+          "published_at": "2026-09-19T10:00:00+00:00",
+          "target_relevance": 0.88
+        },
+        {
+          "source": "example",
+          "source_id": "example:3",
+          "title": "Machine Learning Engineer",
+          "employer": "Company C",
+          "url": "https://jobs.example/3",
+          "published_at": "2026-09-18T10:00:00+00:00",
+          "target_relevance": 0.86
+        }
+      ],
+      "source_values": [
+        "Разрабатывать ML-модели",
+        "Создавать и обучать модели машинного обучения"
+      ]
+    }
+  ],
+  "education_requirements": [],
+  "domain_knowledge": [],
+  "soft_skills": [],
+  "market_variations": [
+    {
+      "name": "Docker",
+      "frequency": 1,
+      "coverage": 0.25,
+      "importance": "market_variation",
+      "sources": [
+        {
+          "source": "example",
+          "source_id": "example:4",
+          "title": "ML Engineer, Product Models",
+          "employer": "Company D",
+          "url": "https://jobs.example/4",
+          "published_at": "2026-09-17T10:00:00+00:00",
+          "target_relevance": 0.82
+        }
+      ],
+      "source_values": ["Docker"],
+      "category": "tools_and_technologies"
+    }
+  ],
+  "sources": [
+    {
+      "source": "example",
+      "source_id": "example:1",
+      "title": "Middle Machine Learning Engineer",
+      "employer": "Company A",
+      "url": "https://jobs.example/1",
+      "published_at": "2026-09-20T10:00:00+00:00",
+      "target_relevance": 0.91
+    },
+    {
+      "source": "example",
+      "source_id": "example:2",
+      "title": "ML Engineer",
+      "employer": "Company B",
+      "url": "https://jobs.example/2",
+      "published_at": "2026-09-19T10:00:00+00:00",
+      "target_relevance": 0.88
+    },
+    {
+      "source": "example",
+      "source_id": "example:3",
+      "title": "Machine Learning Engineer",
+      "employer": "Company C",
+      "url": "https://jobs.example/3",
+      "published_at": "2026-09-18T10:00:00+00:00",
+      "target_relevance": 0.86
+    },
+    {
+      "source": "example",
+      "source_id": "example:4",
+      "title": "ML Engineer, Product Models",
+      "employer": "Company D",
+      "url": "https://jobs.example/4",
+      "published_at": "2026-09-17T10:00:00+00:00",
+      "target_relevance": 0.82
+    }
+  ],
+  "confidence": "medium",
+  "summary": "Для позиции ML Engineer проанализировано 4 релевантных вакансии. Это ориентир по доступной выборке, а не исчерпывающее описание всего рынка. В рассмотренных вакансиях часто встречаются: Machine Learning, Python. В части вакансий также встречается PyTorch. Единичные требования различаются между работодателями и сохранены отдельно как вариации рынка."
+}

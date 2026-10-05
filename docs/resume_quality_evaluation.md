@@ -8,7 +8,7 @@
 Запуск:
 
 ```powershell
-python -m resume_evaluator.resume_quality_evaluator examples/resume.txt output/resume_quality.json
+python -m resume_evaluator.resume_quality_evaluator examples/resumes/anna_sokolova.docx output/resume_quality.json
 ```
 
 Поддерживаются TXT, DOCX и PDF с текстовым слоем. Используется локальная модель

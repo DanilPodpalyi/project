@@ -1,0 +1,280 @@
+{
+  "status": "ok",
+  "target": {
+    "role": "Marketer",
+    "specialization": "Маркетолог",
+    "domain": "Marketing",
+    "seniority": "Middle",
+    "role_family": "Marketing",
+    "focus": "Campaign Management"
+  },
+  "sample_size": 3,
+  "professional_skills": [
+    {
+      "name": "Automation",
+      "frequency": 3,
+      "coverage": 1.0,
+      "importance": "common",
+      "sources": [
+        {
+          "source": "test",
+          "source_id": "v0",
+          "title": "Middle Marketer",
+          "employer": "Company 0",
+          "url": "https://jobs.test/0",
+          "published_at": null,
+          "target_relevance": 0.9,
+          "employer_id": null,
+          "region": null,
+          "description_status": "unknown"
+        },
+        {
+          "source": "test",
+          "source_id": "v1",
+          "title": "Middle Marketer",
+          "employer": "Company 1",
+          "url": "https://jobs.test/1",
+          "published_at": null,
+          "target_relevance": 0.9,
+          "employer_id": null,
+          "region": null,
+          "description_status": "unknown"
+        },
+        {
+          "source": "test",
+          "source_id": "v2",
+          "title": "Middle Marketer",
+          "employer": "Company 2",
+          "url": "https://jobs.test/2",
+          "published_at": null,
+          "target_relevance": 0.9,
+          "employer_id": null,
+          "region": null,
+          "description_status": "unknown"
+        }
+      ],
+      "source_values": [
+        "Automation"
+      ],
+      "evidence": []
+    },
+    {
+      "name": "Project Management",
+      "frequency": 2,
+      "coverage": 0.6666666666666666,
+      "importance": "additional",
+      "sources": [
+        {
+          "source": "test",
+          "source_id": "v0",
+          "title": "Middle Marketer",
+          "employer": "Company 0",
+          "url": "https://jobs.test/0",
+          "published_at": null,
+          "target_relevance": 0.9,
+          "employer_id": null,
+          "region": null,
+          "description_status": "unknown"
+        },
+        {
+          "source": "test",
+          "source_id": "v1",
+          "title": "Middle Marketer",
+          "employer": "Company 1",
+          "url": "https://jobs.test/1",
+          "published_at": null,
+          "target_relevance": 0.9,
+          "employer_id": null,
+          "region": null,
+          "description_status": "unknown"
+        }
+      ],
+      "source_values": [
+        "Project Management"
+      ],
+      "evidence": []
+    }
+  ],
+  "tools_and_technologies": [
+    {
+      "name": "HubSpot",
+      "frequency": 3,
+      "coverage": 1.0,
+      "importance": "common",
+      "sources": [
+        {
+          "source": "test",
+          "source_id": "v0",
+          "title": "Middle Marketer",
+          "employer": "Company 0",
+          "url": "https://jobs.test/0",
+          "published_at": null,
+          "target_relevance": 0.9,
+          "employer_id": null,
+          "region": null,
+          "description_status": "unknown"
+        },
+        {
+          "source": "test",
+          "source_id": "v1",
+          "title": "Middle Marketer",
+          "employer": "Company 1",
+          "url": "https://jobs.test/1",
+          "published_at": null,
+          "target_relevance": 0.9,
+          "employer_id": null,
+          "region": null,
+          "description_status": "unknown"
+        },
+        {
+          "source": "test",
+          "source_id": "v2",
+          "title": "Middle Marketer",
+          "employer": "Company 2",
+          "url": "https://jobs.test/2",
+          "published_at": null,
+          "target_relevance": 0.9,
+          "employer_id": null,
+          "region": null,
+          "description_status": "unknown"
+        }
+      ],
+      "source_values": [
+        "HubSpot"
+      ],
+      "evidence": []
+    },
+    {
+      "name": "Salesforce",
+      "frequency": 2,
+      "coverage": 0.6666666666666666,
+      "importance": "additional",
+      "sources": [
+        {
+          "source": "test",
+          "source_id": "v0",
+          "title": "Middle Marketer",
+          "employer": "Company 0",
+          "url": "https://jobs.test/0",
+          "published_at": null,
+          "target_relevance": 0.9,
+          "employer_id": null,
+          "region": null,
+          "description_status": "unknown"
+        },
+        {
+          "source": "test",
+          "source_id": "v1",
+          "title": "Middle Marketer",
+          "employer": "Company 1",
+          "url": "https://jobs.test/1",
+          "published_at": null,
+          "target_relevance": 0.9,
+          "employer_id": null,
+          "region": null,
+          "description_status": "unknown"
+        }
+      ],
+      "source_values": [
+        "Salesforce"
+      ],
+      "evidence": []
+    }
+  ],
+  "responsibilities": [
+    {
+      "name": "Execute regional campaigns",
+      "frequency": 3,
+      "coverage": 1.0,
+      "importance": "common",
+      "sources": [
+        {
+          "source": "test",
+          "source_id": "v0",
+          "title": "Middle Marketer",
+          "employer": "Company 0",
+          "url": "https://jobs.test/0",
+          "published_at": null,
+          "target_relevance": 0.9,
+          "employer_id": null,
+          "region": null,
+          "description_status": "unknown"
+        },
+        {
+          "source": "test",
+          "source_id": "v1",
+          "title": "Middle Marketer",
+          "employer": "Company 1",
+          "url": "https://jobs.test/1",
+          "published_at": null,
+          "target_relevance": 0.9,
+          "employer_id": null,
+          "region": null,
+          "description_status": "unknown"
+        },
+        {
+          "source": "test",
+          "source_id": "v2",
+          "title": "Middle Marketer",
+          "employer": "Company 2",
+          "url": "https://jobs.test/2",
+          "published_at": null,
+          "target_relevance": 0.9,
+          "employer_id": null,
+          "region": null,
+          "description_status": "unknown"
+        }
+      ],
+      "source_values": [
+        "Execute regional campaigns"
+      ],
+      "evidence": []
+    }
+  ],
+  "education_requirements": [],
+  "domain_knowledge": [],
+  "soft_skills": [],
+  "market_variations": [],
+  "sources": [
+    {
+      "source": "test",
+      "source_id": "v0",
+      "title": "Middle Marketer",
+      "employer": "Company 0",
+      "url": "https://jobs.test/0",
+      "published_at": null,
+      "target_relevance": 0.9,
+      "employer_id": null,
+      "region": null,
+      "description_status": "unknown"
+    },
+    {
+      "source": "test",
+      "source_id": "v1",
+      "title": "Middle Marketer",
+      "employer": "Company 1",
+      "url": "https://jobs.test/1",
+      "published_at": null,
+      "target_relevance": 0.9,
+      "employer_id": null,
+      "region": null,
+      "description_status": "unknown"
+    },
+    {
+      "source": "test",
+      "source_id": "v2",
+      "title": "Middle Marketer",
+      "employer": "Company 2",
+      "url": "https://jobs.test/2",
+      "published_at": null,
+      "target_relevance": 0.9,
+      "employer_id": null,
+      "region": null,
+      "description_status": "unknown"
+    }
+  ],
+  "confidence": "medium",
+  "summary": "Профиль построен по трём тестовым вакансиям.",
+  "adjacent_context": null,
+  "reliability": null
+}

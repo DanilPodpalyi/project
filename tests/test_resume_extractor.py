@@ -2,9 +2,12 @@
 
 """Тесты чтения документов и схемы резюме."""
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from docx import Document
 from pypdf import PdfWriter
@@ -13,7 +16,10 @@ from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 from resume_evaluator.resume_extractor import (
     ResumeData,
     _is_candidate_name_placeholder,
+    _reconcile_explicit_skills,
+    extract_resume,
     read_resume,
+    save_result,
 )
 
 
@@ -45,6 +51,93 @@ class ReadResumeTests(unittest.TestCase):
             read_resume(file_path),
             "Имя: Иван\nНавык\tPython\nОпыт: 3 года",
         )
+
+    def test_reads_docx_without_corrupting_unicode_or_numbers(self) -> None:
+        file_path = self.directory / "unicode_resume.docx"
+        document = Document()
+        document.add_paragraph(
+            "Проверил работу на тестовом наборе журналов "
+            "объёмом более 500 000 записей."
+        )
+        document.add_paragraph(
+            "Сократил время первичного анализа примерно на 25% в 2024 году."
+        )
+        document.save(file_path)
+
+        self.assertEqual(
+            read_resume(file_path),
+            "Проверил работу на тестовом наборе журналов "
+            "объёмом более 500 000 записей.\n"
+            "Сократил время первичного анализа примерно на 25% в 2024 году.",
+        )
+
+    def test_extract_resume_preserves_unicode_and_numbers_through_json(self) -> None:
+        source_result = (
+            "Проверил работу на тестовом наборе журналов "
+            "объёмом более 500 000 записей."
+        )
+        source_achievement = (
+            "Сократил время первичного анализа примерно на 25%."
+        )
+        resume_text = f"ПРОЕКТЫ\n{source_result}\nОПЫТ\n{source_achievement}"
+        payload = self._resume_data()
+        payload.update({
+            "target_profession": {
+                "role": "Analyst",
+                "specialization": "Information Security Analyst",
+                "domain": "Information Security",
+                "seniority": "Middle",
+                "core_skills": ["SIEM"],
+            },
+            "work_experience": [{
+                "company": "Example",
+                "position": "Information Security Analyst",
+                "period": "02.2024 — н.в.",
+                "responsibilities": [],
+                "technologies": ["SIEM"],
+                "achievements": [source_achievement],
+            }],
+            "education": [{
+                "institution": "Уральский технический университет",
+                "education_level": "Бакалавриат",
+                "education_field": "Информационные системы",
+                "field_of_study": "Информационные системы и технологии",
+                "graduation_year": 2022,
+            }],
+            "projects": [{
+                "name": "Анализ журналов авторизации",
+                "description": "Обработка журналов SSH",
+                "role": "Разработчик",
+                "technologies": ["Python", "Linux"],
+                "results": [source_result],
+            }],
+        })
+        response = SimpleNamespace(
+            message=SimpleNamespace(
+                content=json.dumps(payload, ensure_ascii=False),
+            )
+        )
+
+        with patch("resume_evaluator.resume_extractor.chat", return_value=response) as chat_mock:
+            extracted = extract_resume(resume_text)
+
+        prompt = chat_mock.call_args.kwargs["messages"][-1]["content"]
+        self.assertIn(source_result, prompt)
+        self.assertIn(source_achievement, prompt)
+        self.assertEqual(extracted.projects[0].results, [source_result])
+        self.assertEqual(
+            extracted.work_experience[0].achievements,
+            [source_achievement],
+        )
+        self.assertEqual(extracted.education[0].graduation_year, 2022)
+
+        output_path = self.directory / "resume.json"
+        save_result(extracted, output_path)
+        saved = ResumeData.model_validate_json(
+            output_path.read_text(encoding="utf-8")
+        )
+        self.assertEqual(saved.projects[0].results, [source_result])
+        self.assertEqual(saved.education[0].graduation_year, 2022)
 
     def test_reads_pdf_text_layer(self) -> None:
         file_path = self.directory / "resume.pdf"
@@ -159,6 +252,43 @@ class ReadResumeTests(unittest.TestCase):
             _is_candidate_name_placeholder("Фамилия, имя, отчество")
         )
         self.assertFalse(_is_candidate_name_placeholder("Иван Петров"))
+
+    def test_reconciles_explicit_technologies_into_skills(self) -> None:
+        data = self._resume_data()
+        data.update({
+            "target_profession": {
+                "role": "Analyst",
+                "specialization": "Information Security Analyst",
+                "domain": "Information Security",
+                "seniority": "Middle",
+                "core_skills": [],
+            },
+            "skills": ["Python", "Wazuh"],
+            "work_experience": [{
+                "company": "Example",
+                "position": "Security Analyst",
+                "period": None,
+                "responsibilities": [],
+                "technologies": ["Python", "Wireshark"],
+                "achievements": [],
+            }],
+            "projects": [{
+                "name": "SOC lab",
+                "description": None,
+                "role": None,
+                "technologies": ["Wazuh", "VirtualBox", "Sysmon"],
+                "results": [],
+            }],
+        })
+
+        resume = _reconcile_explicit_skills(ResumeData.model_validate(data))
+
+        self.assertEqual(
+            resume.skills,
+            ["Python", "Wazuh", "Wireshark", "VirtualBox", "Sysmon"],
+        )
+        self.assertEqual(resume.education, [])
+        self.assertEqual(len(resume.projects), 1)
 
 
 if __name__ == "__main__":
